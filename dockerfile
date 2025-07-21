@@ -41,8 +41,7 @@ COPY . .
 RUN mkdir -p /app/cache && chown -R 1001:1001 /app/cache
 
 # Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PORT=10000
+ENV PYTHONUNBUFFERED=1
 
 # Expose the port Render expects (defaults to 10000)
 EXPOSE 10000
@@ -50,5 +49,5 @@ EXPOSE 10000
 # Run as non-root user for security
 USER 1001
 
-# Run gunicorn with optimized settings for Render
-CMD ["gunicorn", "main:app", "--bind", "0.0.0.0:${PORT}", "--workers", "2", "--threads", "4", "--timeout", "120"]
+# Run gunicorn with shell form to enable variable substitution
+CMD gunicorn main:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
