@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test for 100Gaj Chatbot</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat-container {
+            width: 100%;
+            max-width: 600px;
+            height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+        }
+        h1 {
+            text-align: center;
+            font-size: 1.5em;
+            padding: 20px;
+            margin: 0;
+            border-bottom: 1px solid #eee;
+            color: #444;
+        }
+        #messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .ai-message {
+            background-color: #e9ecef;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        #form-container {
+            padding: 20px;
+            border-top: 1px solid #eee;
+        }
+        #input-form {
+            display: flex;
+            gap: 10px;
+        }
+        #input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+        #input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #loading {
+            text-align: center;
+            padding: 10px;
+            color: #888;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <h1>100Gaj API Test</h1>
+    <div id="messages">
+        <div class="message ai-message">Hello! Type a message below to test the API.</div>
+    </div>
+    <div id="loading">Assistant is typing...</div>
+    <div id="form-container">
+        <form id="input-form">
+            <input id="input" autocomplete="off" placeholder="Ask anything..." />
+            <button type="submit">Send</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('input-form');
+    const input = document.getElementById('input');
+    const messages = document.getElementById('messages');
+    const loading = document.getElementById('loading');
+
+    // Your live API endpoint from Render
+    const API_URL = 'https://one00gaj-chatbot.onrender.com/api/v1/chat';
+
+    // This will store the conversation history for the session
+    let chatHistory = [];
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const userMessage = input.value.trim();
+        if (!userMessage) return;
+
+        addMessageToUI(userMessage, 'user');
+        input.value = '';
+        loading.style.display = 'block';
+
+        // Create a placeholder for the AI's response
+        const aiMessageElement = addMessageToUI('', 'ai');
+        let fullAiResponse = ''; // To accumulate the AI's full response
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream'
+                },
+                body: JSON.stringify({
+                    message: userMessage,
+                    history: chatHistory
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n\n').filter(line => line.trim());
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const dataStr = line.substring(6);
+                        if (dataStr.includes('"type": "end"')) {
+                            break;
+                        }
+                        try {
+                            const data = JSON.parse(dataStr);
+                            if (data.type === 'text') {
+                                fullAiResponse = data.data; // The full response is sent each time
+                                aiMessageElement.textContent = fullAiResponse; // Update the UI
+                                messages.scrollTop = messages.scrollHeight; // Keep scrolled to bottom
+                            }
+                        } catch (error) {
+                            console.error('Failed to parse stream data:', dataStr, error);
+                        }
+                    }
+                }
+            }
+
+            // After the stream is complete, update the history
+            chatHistory.push({ role: 'user', content: userMessage });
+            if (fullAiResponse) {
+                chatHistory.push({ role: 'assistant', content: fullAiResponse });
+            }
+
+        } catch (error) {
+            console.error('Fetch error:', error);
+            aiMessageElement.textContent = `An error occurred: ${error.message}. Please check the console.`;
+            aiMessageElement.style.backgroundColor = '#f8d7da';
+            aiMessageElement.style.color = '#721c24';
+        } finally {
+            loading.style.display = 'none';
+            messages.scrollTop = messages.scrollHeight;
+        }
+    });
+
+    function addMessageToUI(text, sender) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${sender}-message`;
+        messageElement.textContent = text;
+        messages.appendChild(messageElement);
+        messages.scrollTop = messages.scrollHeight;
+        return messageElement; // Return the element so we can update it later
+    }
+</script>
+
+</body>
+</html>
