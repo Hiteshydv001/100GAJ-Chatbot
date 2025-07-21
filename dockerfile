@@ -34,7 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python packages from the builder stage
 COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
-COPY --from=builder /root/.cache/playwright /root/.cache/playwright
+# Corrected Playwright cache path
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Copy application code
 COPY . .
