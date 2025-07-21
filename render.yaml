@@ -1,0 +1,27 @@
+# render.yaml
+# This file declaratively defines the settings for your 100Gaj Chatbot on Render.
+# This version does NOT use a persistent disk for caching.
+
+services:
+  - type: web
+    name: 100gaj-chatbot
+    runtime: python
+    region: oregon # Or your preferred region
+    # The 'plan' is removed, so it can be deployed on the Free tier.
+
+    # The command to install all dependencies from your requirements file.
+    buildCommand: "pip install -r requirements.txt"
+
+    # The final, robust command to start your Flask app with the Gunicorn server.
+    startCommand: "python3 -m gunicorn main:app --bind 0.0.0.0:${PORT} --timeout 120"
+
+    # The health check endpoint you defined in your main.py.
+    healthCheckPath: /health
+
+    # Define the environment variables required by your application.
+    envVars:
+      - key: GOOGLE_API_KEY
+        # Set the value in the Render dashboard for security.
+        value: ""
+      - key: PYTHONUNBUFFERED
+        value: 1 # Recommended for seeing logs in real-time.
