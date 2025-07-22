@@ -2,13 +2,8 @@
 
 import json
 import logging
-from flask import Blueprint, request, Response
+from flask import Blueprint, request, Response, current_app
 from typing import List, AsyncGenerator
-
-# --- THE CRITICAL FIX ---
-# Import the global chat_engine instance from your main app file.
-# This object is already initialized and ready to use.
-from main import chat_engine
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from app.core.async_worker import async_worker
@@ -16,16 +11,14 @@ from app.core.async_worker import async_worker
 chat_bp = Blueprint('chat_api', __name__)
 logger = logging.getLogger(__name__)
 
-async def process_chat_stream(user_message: str, history: List[dict]) -> AsyncGenerator[str, None]:
+# The async function now accepts the agent as an argument
+async def process_chat_stream(agent, user_message: str, history: List[dict]) -> AsyncGenerator[str, None]:
     """
-    The core async logic that runs in the background thread's event loop.
+    The core async logic. It now receives the pre-loaded agent directly.
     """
-    # Use the pre-loaded engine. This part is now extremely fast.
-    agent = chat_engine 
-
     if agent is None:
-        logger.error("Chat engine is not available.")
-        error_msg = json.dumps({"type": "text", "data": "I'm sorry, the chat service is not initialized correctly. Please try again later."})
+        logger.error("Chat agent provided to process_chat_stream is None.")
+        error_msg = json.dumps({"type": "text", "data": "I'm sorry, the chat service is not available."})
         yield f"data: {error_msg}\n\n"
         return
 
@@ -54,7 +47,8 @@ async def process_chat_stream(user_message: str, history: List[dict]) -> AsyncGe
 @chat_bp.route("/chat", methods=["POST"])
 def chat():
     """
-    The main Flask route. It delegates the async processing to the worker.
+    The main Flask route. It gets the engine from the app context and passes it
+    to the background async worker.
     """
     data = request.get_json()
     if not data or "message" not in data:
@@ -63,11 +57,15 @@ def chat():
     user_message = data["message"]
     history = data.get("history", [])
 
+    # Get the agent HERE, inside the request context where it's safe
+    chat_engine = current_app.chat_engine
+
     def generate():
         """
         A sync generator that gets results from the async worker's generator.
         """
-        async_gen = process_chat_stream(user_message, history)
+        # PASS the agent object to the async function
+        async_gen = process_chat_stream(chat_engine, user_message, history)
         yield from async_worker.run_async_generator(async_gen)
 
     return Response(generate(), mimetype='text/event-stream')

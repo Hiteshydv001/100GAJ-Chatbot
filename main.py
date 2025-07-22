@@ -6,14 +6,9 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from app.api.v1.endpoints.chat_flask import chat_bp
-from app.core.engine import get_chat_engine  # We need this for startup
+from app.core.engine import get_chat_engine
 from app.core.tools.api_property_search import _fetch_all_data
 from app.core.async_worker import async_worker
-
-# --- THE CRITICAL FIX: Part 1 ---
-# Global variable to hold the single, pre-loaded chat engine instance.
-# It starts as None and will be populated during startup.
-chat_engine = None
 
 # Create the Flask application instance
 app = Flask(__name__)
@@ -39,14 +34,13 @@ def health_check():
         "message": "100Gaj API is running. Use /api/v1/chat to interact."
     })
 
-# --- THE CRITICAL FIX: Part 2 ---
 # Logic to pre-load the engine and data ONCE when the application starts.
-# This is a slow process, which is why the Gunicorn timeout is necessary.
 with app.app_context():
     logging.info("Application starting up... Loading AI engine.")
     
-    # Load the engine and store it in the global variable.
-    chat_engine = get_chat_engine()
+    # Load the engine and attach it directly to the Flask app object.
+    # This makes it accessible via `current_app.chat_engine` elsewhere.
+    app.chat_engine = get_chat_engine()
     
     # Pre-fetch property data
     _fetch_all_data()
