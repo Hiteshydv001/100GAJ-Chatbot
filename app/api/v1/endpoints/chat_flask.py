@@ -1,11 +1,15 @@
-# File: app/api/v1/endpoints/chat_flask.py
+# app/api/v1/endpoints/chat_flask.py
 
 import json
 import logging
 from flask import Blueprint, request, Response
 from typing import List, AsyncGenerator
 
-from app.core.engine import get_chat_engine
+# --- THE CRITICAL FIX ---
+# Import the global chat_engine instance from your main app file.
+# This object is already initialized and ready to use.
+from main import chat_engine
+
 from llama_index.core.llms import ChatMessage, MessageRole
 from app.core.async_worker import async_worker
 
@@ -16,7 +20,15 @@ async def process_chat_stream(user_message: str, history: List[dict]) -> AsyncGe
     """
     The core async logic that runs in the background thread's event loop.
     """
-    agent = get_chat_engine()
+    # Use the pre-loaded engine. This part is now extremely fast.
+    agent = chat_engine 
+
+    if agent is None:
+        logger.error("Chat engine is not available.")
+        error_msg = json.dumps({"type": "text", "data": "I'm sorry, the chat service is not initialized correctly. Please try again later."})
+        yield f"data: {error_msg}\n\n"
+        return
+
     chat_history: List[ChatMessage] = []
     for msg in history:
         role = MessageRole.USER if msg.get("role") == 'user' else MessageRole.ASSISTANT
@@ -26,7 +38,7 @@ async def process_chat_stream(user_message: str, history: List[dict]) -> AsyncGe
         response = await agent.achat(user_message, chat_history=chat_history)
 
         if not response or not hasattr(response, 'response'):
-            error_msg = json.dumps({"type": "text", "data": "I apologize, but I've encountered an error."})
+            error_msg = json.dumps({"type": "text", "data": "I apologize, but I've encountered an error and could not get a response."})
             yield f"data: {error_msg}\n\n"
             return
 
@@ -36,7 +48,7 @@ async def process_chat_stream(user_message: str, history: List[dict]) -> AsyncGe
 
     except Exception as e:
         logger.error(f"Unexpected error in chat stream: {str(e)}", exc_info=True)
-        error_msg = json.dumps({"type": "text", "data": "I'm sorry, an unexpected error occurred."})
+        error_msg = json.dumps({"type": "text", "data": "I'm sorry, an unexpected error occurred while processing your request."})
         yield f"data: {error_msg}\n\n"
 
 @chat_bp.route("/chat", methods=["POST"])
