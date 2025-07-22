@@ -34,6 +34,7 @@ def health_check():
         "message": "100Gaj API is running. Use /api/v1/chat to interact."
     })
 
+# --- THE CRITICAL FIX: Part 1 ---
 # Logic to pre-load the engine and data ONCE when the application starts.
 with app.app_context():
     logging.info("Application starting up... Loading AI engine.")
@@ -51,6 +52,5 @@ with app.app_context():
 atexit.register(lambda: async_worker.stop())
 
 # This block is only for running the app locally (e.g., `python main.py`)
-# It is NOT used by Gunicorn in production.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True, use_reloader=False)
